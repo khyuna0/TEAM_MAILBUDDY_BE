@@ -48,7 +48,8 @@ public class SecurityConfig {
                 // CSRF 공격 방지 비활성화. 보통 API 서버에서 토큰으로 인증하기 때문에 비활성화하는 경우가 많음
                 .csrf(csrf -> csrf.disable())
                 // 아래 만든 corsConfigurationSource() 설정을 통해 CORS 정책을 적용
-                .cors(Customizer.withDefaults())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
                 // 요청 권한 설정
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
