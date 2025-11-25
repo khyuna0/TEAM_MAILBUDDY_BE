@@ -54,7 +54,6 @@ dependencies {
 
     // 배포 쿠키용
     implementation 'org.springframework.session:spring-session-core'
-    implementation 'org.springframework.session:spring-session-web'
 
 }
 
