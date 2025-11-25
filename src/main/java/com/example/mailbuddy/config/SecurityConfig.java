@@ -43,18 +43,14 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers(
-                         "/index.html", "/login",
-                        "/api/auth/**",
-                        "/error"
-                ).permitAll()
+                .requestMatchers("/login", "/api/auth/**", "/error").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/user/**").hasRole("USER")
                 .anyRequest().authenticated()
         );
 
-        // ★★★ 로그인 성공 후 S3 FE 로 이동해야 세션 유지됨 ★★★
-        String S3_FE = "http://mailbuddy-s3-fe.s3-website.ap-northeast-2.amazonaws.com/schedule";
+        // ★ S3 SPA root 로 이동해야 404 안 남
+        String S3_FE = "http://mailbuddy-s3-fe.s3-website.ap-northeast-2.amazonaws.com/";
 
         http.formLogin(login -> login
                 .loginPage("/login").permitAll()
@@ -68,8 +64,8 @@ public class SecurityConfig {
 
         http.oauth2Login(oauth2 -> oauth2
                 .loginPage("/login").permitAll()
-                .authorizationEndpoint(authz -> authz
-                        .authorizationRequestResolver(customOAuthRequestResolver())
+                .authorizationEndpoint(authz ->
+                        authz.authorizationRequestResolver(customOAuthRequestResolver())
                 )
                 .userInfoEndpoint(userinfo -> userinfo.userService(customOAuth2UserService))
                 .failureHandler(oauth2LoginFailureHandler)
@@ -81,7 +77,9 @@ public class SecurityConfig {
                 .invalidateHttpSession(true)
                 .clearAuthentication(true)
                 .deleteCookies("JSESSIONID", "remember-me")
-                .logoutSuccessHandler((req, res, auth) -> res.setStatus(HttpServletResponse.SC_OK))
+                .logoutSuccessHandler((req, res, auth) ->
+                        res.setStatus(HttpServletResponse.SC_OK)
+                )
         );
 
         http.anonymous(anonymous -> anonymous.disable());
@@ -103,7 +101,8 @@ public class SecurityConfig {
             }
 
             @Override
-            public OAuth2AuthorizationRequest resolve(jakarta.servlet.http.HttpServletRequest request, String clientRegistrationId) {
+            public OAuth2AuthorizationRequest resolve(jakarta.servlet.http.HttpServletRequest request,
+                                                      String clientRegistrationId) {
                 return customize(defaultResolver.resolve(request, clientRegistrationId));
             }
 
@@ -130,7 +129,9 @@ public class SecurityConfig {
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Set-Cookie"));  // ★ 세션 쿠키 전달 필수
+
+        // ★ 리다이렉트(Location) + 세션(Set-Cookie) 둘 다 노출해야 로그인 성공처리됨
+        config.setExposedHeaders(List.of("Set-Cookie", "Location"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -146,7 +147,7 @@ public class SecurityConfig {
 
         cs.setCookieName("JSESSIONID");
         cs.setSameSite("Lax");
-        cs.setUseSecureCookie(false);  // HTTPS 아니므로 false
+        cs.setUseSecureCookie(false);
         cs.setCookiePath("/");
 
         resolver.setCookieSerializer(cs);
