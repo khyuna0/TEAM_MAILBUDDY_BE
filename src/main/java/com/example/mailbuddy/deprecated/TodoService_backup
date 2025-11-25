@@ -1,0 +1,63 @@
+//package com.example.mailbuddy.service;
+//
+//import com.example.mailbuddy.dto.TodoDto;
+//import com.example.mailbuddy.entity.TodoItem;
+//import com.example.mailbuddy.entity.User;
+//import com.example.mailbuddy.repository.TodoRepository;
+//import com.example.mailbuddy.repository.UserRepository;
+//import lombok.RequiredArgsConstructor;
+//import org.springframework.stereotype.Service;
+//import org.springframework.transaction.annotation.Transactional;
+//
+//import java.util.List;
+//
+//@Service @RequiredArgsConstructor
+//@Transactional
+//public class TodoService_backup {
+//
+//    private final TodoRepository todoRepository;
+//    private final UserRepository userRepository;
+//
+//    public List<TodoDto> list(Long userId, String ym) {
+//        return todoRepository.findByYmOrderByCreatedAtDesc(userId, ym)
+//                .stream().map(TodoDto::of).toList();
+//    }
+//
+//    public TodoDto create(Long userId, TodoDto req) {
+//        User u = userRepository.findById(userId).orElseThrow();
+//        TodoItem saved = todoRepository.save(
+//                TodoItem.builder()
+//                        .user(u)
+//                        .ym(req.getYm())
+//                        .text(req.getText().trim())
+//                        .done(false)
+//                        .build()
+//        );
+//        return TodoDto.of(saved);
+//    }
+//
+//    public TodoDto patch(Long userId, Long id, TodoDto req) {
+//        TodoItem e = todoRepository.findByIdAndUser_Id(id, userId).orElseThrow();
+//
+//        if (req.getText() != null && !req.getText().isBlank()) {
+//            e.setText(req.getText().trim());
+//        }
+//        if (req.getDone() != null) {
+//            e.setDone(req.getDone());
+//        }
+//        // ym 변경 허용 시
+//        if (req.getYm() != null) {
+//            e.setYm(req.getYm());
+//        }
+//        return TodoDto.of(e);
+//    }
+//
+//    public void delete(Long userId, Long id) {
+//        TodoItem e = todoRepository.findByIdAndUser_Id(id, userId).orElseThrow();
+//        todoRepository.delete(e);
+//    }
+//
+//    public long clearCompleted(Long userId, String ym) {
+//        return todoRepository.deleteByUser_IdAndYmAndDoneTrue(userId, ym);
+//    }
+//}

@@ -1,0 +1,58 @@
+server:
+  port: 8888
+
+spring:
+  jackson:
+    time-zone: Asia/Seoul
+  datasource:
+    url: jdbc:mysql://localhost:3306/mailbuddy
+    username: root
+    password: 12345
+  #    url: jdbc:mysql://spring-db-1.cruymm4aqdpz.ap-northeast-2.rds.amazonaws.com:3306/emotion # RDS ???? ?????
+  #    username: admin # RDS ??? ??? ??
+  #    password: 12345678 # RDS ??? ????
+  #    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  #  cloud:
+  #    aws:
+  #      credentials:
+  #        access-key: AKIAQBMR2PZ5QIHYI6RC # IAM ??? ???? ??? ?
+  #        secret-key: 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 # IAM ??? ???? ?? ??? ?
+  #      s3:
+  #        bucket: spring-security-test-s3-bucket # ??? ???
+  #      region:
+  #        static: ap-northeast-2
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: 352422177207-keelftur4dno2mbq7687hv7m0bepa8kq.apps.googleusercontent.com
+            client-secret: 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
+            scope:
+              - https://www.googleapis.com/auth/gmail.readonly
+              - https://www.googleapis.com/auth/userinfo.email
+              - https://www.googleapis.com/auth/userinfo.profile
+            redirect-uri: "http://ec2-52-79-115-253.ap-northeast-2.compute.amazonaws.com:8888/login/oauth2/code/{registrationId}"
+        provider:
+          google:
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+#gemini api connect
+#gemini:
+#  api:
+#    key: "AIzaSyCVI8L1DO7xueSnvuOBF1K5plZIetiPQwQ"
+#    url: "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
+
+jasypt:
+  encryptor:
+    password: "teamMailbuddy123"
+
+#mistral ai 추가
+mistral:
+  api:
+    key: "pKbMQn1v6YnlXIstF1iEjl6kvFchQfwt"
+    url: "https://api.mistral.ai/v1/chat/completions"
+    model: "mistral-small-latest"

@@ -1,0 +1,127 @@
+package com.example.mailbuddy.controller;
+
+import com.example.mailbuddy.dto.UserRequestDto;
+import com.example.mailbuddy.entity.User;
+import com.example.mailbuddy.repository.UserRepository;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private final SecurityFilterChain filterChain;
+
+    public AuthController(SecurityFilterChain filterChain) {
+        this.filterChain = filterChain;
+    }
+
+    // 회원가입
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@RequestBody @Valid UserRequestDto req, BindingResult result) {
+        Map<String, String> errors = new HashMap<>();
+        if (userRepository.findByUsername(req.getUsername()).isPresent()) { // 아이디 중복 여부 검사
+            errors.put("idError", "이미 존재하는 아이디입니다.");
+        }
+        if (result.hasErrors()) {
+            result.getFieldErrors().forEach(err -> {
+                        errors.put(err.getField(), err.getDefaultMessage());
+                    }
+            );
+        }
+        if (!errors.isEmpty()) {
+            return ResponseEntity.badRequest().body(errors);
+        }
+        User user = new User();
+        user.setUsername(req.getUsername());
+        user.setPassword(passwordEncoder.encode(req.getPassword()));
+        user.setName(req.getName());
+        user.setBirth(req.getBirth());
+        userRepository.save(user);
+        return ResponseEntity.ok().body("가입 완료");
+    }
+
+
+        // 현재 폼로그인한 유저의 username + 생일 가져오기 (jsessionid 이용)
+        @GetMapping("/me")
+        public ResponseEntity<?> getCurrentUser(Authentication authentication) {
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED)
+                        .body(Map.of("error", "로그인되지 않음"));
+            }
+            User user = userRepository.findByUsername(authentication.getName()).orElseThrow(
+                    () -> new UsernameNotFoundException("username not found: " + authentication.getName())
+            );
+            return ResponseEntity.ok(Map.of(
+                    "username", user.getUsername(),
+                    "birth", user.getBirth()
+            ));
+            // 결과 { "birth": "2025-11-05", "username": "ccc" }
+        }
+
+        // 현재 폼+구글 로그인한 유저의 username + 구글 이메일 가져오기 (jsessionid 이용)
+        @GetMapping("/me2")
+        public ResponseEntity<?> getCurrentUserOAuth2(OAuth2AuthenticationToken authentication) {
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED)
+                        .body(Map.of("error", "구글 로그인되지 않음"));
+            }
+            OAuth2User user = authentication.getPrincipal();
+            String username = authentication.getName();
+            String email = user.getAttribute("email"); // 구글 이메일
+            return ResponseEntity.ok(Map.of("username", username, "email", email));
+        }
+
+
+   // 현재 로그인한 유저의 username + 구글 이메일 + 생일 가져오기 (jsessionid 이용)
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED)
+                    .body(Map.of("error", "로그인되지 않음"));
+        }
+        Map<String, String> resp = new HashMap<>();
+        // 일반 로그인(UsernamePasswordAuthenticationToken) 경로일 때
+        if (authentication instanceof UsernamePasswordAuthenticationToken) {
+            User user = userRepository.findByUsername(authentication.getName()).orElseThrow(
+                    () -> new UsernameNotFoundException("user not found"));
+            resp.put("username", user.getUsername());
+            resp.put("birth", user.getBirth());
+            System.out.println("폼 " + resp);
+            return ResponseEntity.ok(resp);
+        }
+        // OAuth2 로그인 경로일 때
+        if (authentication instanceof OAuth2AuthenticationToken oauthAuth) {
+            OAuth2User oauthUser = oauthAuth.getPrincipal();
+            String username = oauthAuth.getName();
+            String email = oauthUser.getAttribute("email");
+            String birth = userRepository.findByUsername(username).orElseThrow(
+                    () -> new UsernameNotFoundException("user not found")).getBirth();
+            resp.put("username", username);
+            resp.put("email", email != null ? email : "");
+            resp.put("birth", birth);
+            System.out.println("구글 " + resp);
+            return ResponseEntity.ok(resp);
+        }
+        return ResponseEntity.status(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Unsupported authentication type"));
+    }
+}

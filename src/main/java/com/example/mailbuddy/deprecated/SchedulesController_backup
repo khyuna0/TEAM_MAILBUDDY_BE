@@ -1,0 +1,175 @@
+package com.example.mailbuddy.controller;
+
+import com.example.mailbuddy.dto.SchedulesRequestDto;
+import com.example.mailbuddy.entity.User;
+import com.example.mailbuddy.entity.Schedules;
+import com.example.mailbuddy.repository.UserRepository;
+import com.example.mailbuddy.repository.SchedulesRepository;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/schedules")
+public class SchedulesController {
+
+    private final UserRepository userRepository;
+    private final SchedulesRepository schedulesRepository;
+
+    @Autowired
+    public SchedulesController(UserRepository userRepository,
+                               SchedulesRepository schedulesRepository) {
+        this.userRepository = userRepository;
+        this.schedulesRepository = schedulesRepository;
+    }
+
+    // 일정 생성
+    @PostMapping
+    public ResponseEntity<?> write(@Valid @RequestBody SchedulesRequestDto req,
+                                   BindingResult br,
+                                   Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "로그인 정보가 없습니다."));
+        }
+        if (br.hasErrors()) {
+            Map<String, String> errors = new HashMap<>();
+            br.getFieldErrors().forEach(e -> errors.put(e.getField(), e.getDefaultMessage()));
+            return ResponseEntity.badRequest().body(Map.of("errors", errors));
+        }
+
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new UsernameNotFoundException("사용자 정보가 없습니다."));
+
+        Schedules s = new Schedules();
+        s.setUser(user);
+        s.setTitle(req.getTitle());      // subject -> title
+        s.setNotes(req.getContent());      // content -> notes
+        s.setPlace(req.getPlace());        // 선택값
+        s.setEventDate(req.getEventDate()); // LocalDateTime 그대로
+        s.setEventTime(req.getEventTime()); // LocalDateTime 그대로
+
+        Schedules saved = schedulesRepository.save(s);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved); // 원본처럼 엔티티 반환
+    }
+
+    // 날짜별 목록
+    @GetMapping("/date")
+    public ResponseEntity<?> getByDate(
+            @RequestParam("value") @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate day,
+            Authentication auth) {
+
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "로그인 정보가 없습니다."));
+        }
+
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new UsernameNotFoundException("사용자 정보가 없습니다."));
+
+        LocalDateTime start = day.atStartOfDay();
+        LocalDateTime end   = start.plusDays(1);
+        var schedules = schedulesRepository
+                .findByUserAndEventDateGreaterThanEqualAndEventDateLessThan(
+                        user, start, end, Sort.by(Sort.Direction.ASC, "eventDate"));
+
+        return ResponseEntity.ok(schedules);
+    }
+
+    // 월별 목록: /api/schedules/ym?value=YYYY-MM
+    @GetMapping("/ym")
+    public ResponseEntity<?> getByYM(
+            @RequestParam("value") @DateTimeFormat(pattern = "yyyy-MM") YearMonth ym,
+            Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "로그인 정보가 없습니다."));
+        }
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new UsernameNotFoundException("사용자 정보가 없습니다."));
+
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end   = ym.plusMonths(1).atDay(1).atStartOfDay();
+        var result = schedulesRepository
+                .findByUserAndEventDateGreaterThanEqualAndEventDateLessThanOrderByEventDateAsc(
+                        user, start, end);
+
+        return ResponseEntity.ok(result);
+    }
+
+    // 단건 조회
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getOne(@PathVariable("id") Long id, Authentication auth) {
+        Optional<Schedules> opt = schedulesRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "없는 글입니다."));
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "로그인 정보가 없습니다."));
+        }
+        Schedules s = opt.get();
+        if (!auth.getName().equals(s.getUser().getUsername())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "권한이 없습니다."));
+        }
+        return ResponseEntity.ok(s);
+    }
+
+    // 삭제
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id, Authentication auth) {
+        Optional<Schedules> opt = schedulesRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "없는 글입니다."));
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "로그인 정보가 없습니다."));
+        }
+        Schedules s = opt.get();
+        if (!auth.getName().equals(s.getUser().getUsername())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "권한이 없습니다."));
+        }
+        schedulesRepository.delete(s);
+        return ResponseEntity.ok(Map.of("message", "삭제가 완료되었습니다."));
+    }
+
+    // 수정
+    @PutMapping(value="/{id}", consumes= MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @Valid @RequestBody SchedulesRequestDto req,
+                                    BindingResult br,
+                                    Authentication auth) {
+        if (auth == null || !auth.isAuthenticated())
+            return ResponseEntity.status(401).body(Map.of("error","로그인 정보가 없습니다."));
+
+        var s = schedulesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"없는 글입니다."));
+
+        if (!auth.getName().equals(s.getUser().getUsername()))
+            return ResponseEntity.status(403).body(Map.of("error","권한이 없습니다."));
+
+        if (br.hasErrors()) {
+            Map<String,String> errors = new HashMap<>();
+            br.getFieldErrors().forEach(e -> errors.put(e.getField(), e.getDefaultMessage()));
+            return ResponseEntity.badRequest().body(Map.of("errors", errors));
+        }
+
+        s.setTitle(req.getTitle().trim());
+        s.setNotes(req.getContent().trim());
+        s.setPlace(req.getPlace());
+        s.setEventDate(req.getEventDate());
+        s.setEventTime(req.getEventTime());
+
+        schedulesRepository.save(s);
+        return ResponseEntity.noContent().build();
+    }
+
+}

@@ -1,0 +1,99 @@
+package com.example.mailbuddy.controller;
+
+
+import com.example.mailbuddy.dto.MypageResponseDto;
+import com.example.mailbuddy.dto.UpdateProfileRequest;
+import com.example.mailbuddy.entity.User;
+import com.example.mailbuddy.repository.UserRepository;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/me")
+public class MypageController {
+
+    private final UserRepository userRepository;
+    public MypageController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    // 사용자 정보 불러오기
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED)
+                    .body(Map.of("error", "로그인되지 않음"));
+        }
+        String currentUsername = authentication.getName();
+
+        User user = userRepository.findByUsername(currentUsername).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpServletResponse.SC_NOT_FOUND)
+                    .body(Map.of("error", "사용자를 찾을 수 없습니다."));
+        }
+
+        return ResponseEntity.ok(new MypageResponseDto(
+                user.getUsername(), user.getName(), user.getBirth()
+        ));
+    }
+
+
+    //마이 페이지 수정
+    @PatchMapping("/profile")
+    public ResponseEntity<?> updateProfile(@Validated(UpdateProfileRequest.ValidationSequence.class) @RequestBody UpdateProfileRequest req,
+                                           BindingResult bindingResult,
+                                           Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED)
+                    .body(Map.of("error", "로그인되지 않음"));
+        }
+
+        // 검증 에러 있으면 400으로 메시지 반환
+        if (bindingResult.hasErrors()) {
+            Map<String, String> errors = new HashMap<>();
+            bindingResult.getFieldErrors().forEach(err ->
+                    errors.put(err.getField(), err.getDefaultMessage())
+            );
+            System.out.println("errors: " + errors);
+            return ResponseEntity.badRequest().body(errors);
+        }
+
+        String currentUsername = auth.getName();
+        User user = userRepository.findByUsername(currentUsername).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        // 이름
+        if (req.getName() != null && !req.getName().trim().isEmpty()) {
+            user.setName(req.getName().trim());
+        }
+
+        // 생일
+        if (req.getBirth() != null && !req.getBirth().trim().isEmpty()) {
+            user.setBirth(req.getBirth().trim());
+        }
+
+        // 비밀번호
+        if (req.getPassword() != null && !req.getPassword().trim().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(req.getPassword().trim()));
+        }
+        userRepository.save(user);
+        return ResponseEntity.ok(new MypageResponseDto(user.getUsername(), user.getName(), user.getBirth()));
+    }
+
+}

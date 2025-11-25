@@ -1,0 +1,95 @@
+package com.example.mailbuddy.service;
+
+import com.example.mailbuddy.entity.User;
+import com.example.mailbuddy.repository.UserRepository;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Service;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+@Service
+// 구글 OAuth 로그인 시 세션 username으로 DB 회원찾아 구글 이메일 저장하는 서비스
+public class CustomOAuth2UserService extends DefaultOAuth2UserService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private final HttpSession httpSession;  // 현재 세션에서 폼 로그인 유저 찾기 용
+
+    public CustomOAuth2UserService(HttpSession httpSession) {
+        this.httpSession = httpSession;
+    }
+
+    @Override
+    public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
+        OAuth2User oAuth2User = super.loadUser(userRequest);
+
+        // 1. 수정 전. 기존
+//        // 구글에서 받은 이메일
+//        String googleEmail = oAuth2User.getAttribute("email");
+//        if (googleEmail == null) {
+//            throw new OAuth2AuthenticationException("Google email not found");
+//        }
+//
+//        // 현재 세션에서 폼 로그인한 user 가져오기 (예: 세션에 username 저장했다고 가정)
+//        String loggedInUsername = (String) httpSession.getAttribute("LOGGED_IN_USER");
+//        if (loggedInUsername != null) {
+//            // 폼 로그인 유저 DB 조회
+//            User user = userRepository.findByUsername(loggedInUsername).orElseThrow(() ->
+//                    new UsernameNotFoundException("User not found: " + loggedInUsername));
+//
+//            // 구글 이메일 연결해서 저장
+//            user.setGoogleEmail(googleEmail);
+//            userRepository.save(user);
+//        }
+//
+//        // 인증객체용 커스텀 Principal 생성 (생략 가능)
+//        return oAuth2User;
+
+        // 2. 수정
+        // 구글에서 받는 유저 속성
+        Map<String, Object> attributes = oAuth2User.getAttributes();
+
+        // 구글에서 받은 이메일
+        String googleEmail = (String) attributes.get("email");
+        if (googleEmail == null) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("email_not_found"), "Google email not found");
+        }
+
+        // 현재 세션에서 폼 로그인한 유저명 가져오기
+        String loggedInUsername = (String) httpSession.getAttribute("LOGGED_IN_USER");
+        if (loggedInUsername != null) {
+            User user = userRepository.findByUsername(loggedInUsername)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found: " + loggedInUsername));
+
+            // 구글 이메일을 유저 DB에 저장
+            user.setGoogleEmail(googleEmail);
+            userRepository.save(user);
+        }
+
+        final User finalUser = userRepository.findByGoogleEmail(googleEmail)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found by Google email: " + googleEmail));
+
+        return new DefaultOAuth2User(
+                Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")),
+                attributes,
+                "email") {
+            @Override
+            public String getName() {
+                return finalUser.getUsername();  // 커스텀 유저네임 반환
+            }
+        };
+
+    }
+}

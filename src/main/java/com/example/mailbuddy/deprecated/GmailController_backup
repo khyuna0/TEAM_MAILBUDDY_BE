@@ -1,0 +1,491 @@
+package com.example.mailbuddy.controller;
+
+import com.example.mailbuddy.utils.EmailTimeParser;
+import com.example.mailbuddy.entity.Gmail;
+import com.example.mailbuddy.entity.User;
+import com.example.mailbuddy.repository.GmailRepository;
+import com.example.mailbuddy.repository.UserRepository;
+import com.example.mailbuddy.service.CustomOAuth2UserService;
+import com.example.mailbuddy.service.GmailService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/gmail")
+public class GmailController {
+
+    private final OAuth2AuthorizedClientService authorizedClientService;
+
+    public GmailController(OAuth2AuthorizedClientService authorizedClientService) {
+        this.authorizedClientService = authorizedClientService;
+    }
+
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private GmailService gmailService;
+    @Autowired
+    private GmailRepository gmailRepository;
+    @Autowired
+    @Qualifier("gmailWebClient")
+    private WebClient gmailWebClient;
+
+    // 인증된 사용자 정보의 이름과 이메일 주소 가져오는 거
+    @GetMapping("/users")
+    public ResponseEntity<String> getGoogleUser(OAuth2AuthenticationToken authentication) {
+        // 인증된 사용자 정보에서 OAuth2 클라이언트 가져오기
+        String clientRegistrationId = authentication.getAuthorizedClientRegistrationId();
+        OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+                clientRegistrationId,
+                authentication.getName()
+        );
+        String accessToken = client.getAccessToken().getTokenValue();
+//        String IdentityId = client.getPrincipalName();
+//        /*
+//        token : ya29.A0ATi6K2vBDO8eVmeT13wVW6N2I8c_kvWNF4E2YJfRRmDHHO4uM9c97tjrRShF3sRYTs_z4SBr5VMi19TG0Vb4Lkx7Z3Q1Rdh3hhBxaRvx5BuIrHhMdyG71suril4q3kJzQi5xHpgY2Pj9CPmglYBprGgzmWw8sgQeCiEsVAV54ESOu-Qeb1N19W-eStAWN-2O9337Eds9iKlmGbA3q_ZxHiBs8rYannlZiTCXlLB6CD89Qy0qv6L_6OYPTnvHNBxbPxFToypPXqnhMzkl0ty7CEczUtQWlQaCgYKAfgSARQSFQHGX2MiNA5x9aA9jcDxLSdgQGHCUA0293
+//        IdentityId : 101421144391558088646
+//        */
+        // 사용자의 정보를 가져올 수 있는 코드 ..
+        OAuth2User user = authentication.getPrincipal();
+        String email = user.getAttribute("email"); // 사용자 이메일 가져오기
+        String name = user.getAttribute("name");   // 사용자 이름 가져오기 (있으면)
+        String userInfo = "[사용자 이름] " + name + " [사용자 구글 이메일] " + email;
+        return ResponseEntity.ok().body(userInfo);
+//        // 결과 문자열로 출력 (필요하면 JSON, DTO로 변환 가능)
+//        String result = String.format("[사용자 이름] %s\n[사용자 구글 이메일] %s",
+//                name, email);
+//        return ResponseEntity.ok(result);
+    }
+
+    // 작동 안함 .. 흠..
+    @GetMapping("/mypages")
+    public ResponseEntity<String> myPage(Authentication authentication, Model model) {
+        String username = authentication.getName();
+        User user = userRepository.findByUsername(username).orElseThrow(() ->
+                new UsernameNotFoundException("User not found: " + username));
+
+        model.addAttribute("username", user.getUsername());
+        model.addAttribute("googleEmail", user.getGoogleEmail() != null ? user.getGoogleEmail() : "Not linked");
+        model.addAttribute("name", user.getName());
+
+        return ResponseEntity.ok().body("모델");
+    }
+
+
+
+    // 사용자의 메일 목록 (최대 100개인듯) [{id : ""}, {threadId : ""}] 로 이루어져 있음. id 안에 모든 정보 저장되어 있음
+    @GetMapping("/messages")
+    // OAuth2AuthenticationToken 은 스프링 시큐리티에서 OAuth2 인증 토큰을 표현하는 객체로, 로그인된 OAuth2 사용자의 상태를 알려줌
+    public ResponseEntity<String> getMessages(OAuth2AuthenticationToken authentication) {
+        // 인증된 사용자 정보에서 OAuth2 클라이언트 가져오기
+        String clientRegistrationId = authentication.getAuthorizedClientRegistrationId();
+        OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+                clientRegistrationId,
+                authentication.getName()
+        );
+
+        // Access Token 추출
+        String accessToken = client.getAccessToken().getTokenValue();
+
+        // Gmail API 호출
+//        WebClient webClient = WebClient.builder()
+//                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages")
+//                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+//                .build();
+
+        String response = gmailWebClient.get()
+                .uri("/users/me/messages")  // baseUrl 뒤에 붙는 부분
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)  // 토큰을 여기서 추가!
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        return ResponseEntity.ok(response);
+    }
+
+    // 상위 10개 이메일 가져오기 + 엔티티 저장
+    @GetMapping("/messages/save-top10")
+    public ResponseEntity<String> saveTop10Messages(OAuth2AuthenticationToken authentication) {
+        OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+                authentication.getAuthorizedClientRegistrationId(),
+                authentication.getName()
+        );
+        String accessToken = client.getAccessToken().getTokenValue();
+
+        // 1. 상위 10개 메시지 ID 리스트 가져오기
+//        WebClient listClient = WebClient.builder()
+//                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages")
+//                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+//                .build();
+
+        String listResponse = gmailWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/users/me/messages")
+                        .queryParam("maxResults", 10)
+                        .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        //System.out.println("listResponse" + listResponse); // 확인용
+        //  @GetMapping("/messages") 으로 가져오는 것처럼 id, threadid, nextpagetoken .. 10개만 추출이 됨
+
+        try {
+            org.json.JSONObject listJson = new org.json.JSONObject(listResponse);
+            org.json.JSONArray messagesArray = listJson.optJSONArray("messages");
+
+            //System.out.println("messagesArray" + messagesArray); // 확인용
+            // {id, threadId}, {} 이런 식으로 배열의 개수를 알 수 있게 가져와짐
+
+            if (messagesArray == null || messagesArray.length() == 0) {
+                return ResponseEntity.ok("저장할 메시지가 없습니다.");
+            }
+
+            // 2. 각각 메시지 ID별 상세 정보 요청 및 저장
+            for (int i = 0; i < messagesArray.length(); i++) {
+                String messageId = messagesArray.getJSONObject(i).getString("id");
+
+//                WebClient detailClient = WebClient.builder()
+//                        .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + messageId)
+//                        .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+//                        .build();
+
+                String detailResponse = gmailWebClient.get()
+                        .uri("/users/me/messages/" + messageId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block();
+
+                org.json.JSONObject json = new org.json.JSONObject(detailResponse);
+                org.json.JSONObject payload = json.getJSONObject("payload");
+
+                // 헤더 추출 및 파싱(이전 코드 재활용)
+                String from = "";
+                String date = "";
+                String subject = "";
+                org.json.JSONArray headers = payload.getJSONArray("headers");
+                for (int j = 0; j < headers.length(); j++) {
+                    org.json.JSONObject header = headers.getJSONObject(j);
+                    String name = header.getString("name");
+                    String value = header.getString("value");
+                    if ("From".equalsIgnoreCase(name)) {
+                        from = value;
+                    } else if ("Date".equalsIgnoreCase(name)) {
+                        date = value;
+                    } else if ("Subject".equalsIgnoreCase(name)) {
+                        subject = value;
+                    }
+                }
+
+                String fromName = "";
+                String fromEmail = "";
+                if (!from.isEmpty()) {
+                    int startIdx = from.indexOf("<");
+                    int endIdx = from.indexOf(">");
+                    if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
+                        fromName = from.substring(0, startIdx).trim().replace("\"", "");
+                        fromEmail = from.substring(startIdx + 1, endIdx).trim();
+                    } else {
+                        fromEmail = from.trim();
+                    }
+                }
+
+                // 본문 추출 (이전 코드 재활용)
+                String data = "";
+                if (payload.has("body") && payload.getJSONObject("body").has("data")) {
+                    data = payload.getJSONObject("body").optString("data", "");
+                }
+                if (data.isEmpty() && payload.has("parts")) {
+                    org.json.JSONArray parts = payload.getJSONArray("parts");
+                    for (int k = 0; k < parts.length(); k++) {
+                        org.json.JSONObject part = parts.getJSONObject(k);
+                        String mimeType = part.getString("mimeType");
+                        if ("text/html".equalsIgnoreCase(mimeType) || "text/plain".equalsIgnoreCase(mimeType)) {
+                            data = part.getJSONObject("body").optString("data", "");
+                            if (!data.isEmpty()) break;
+                        }
+                    }
+                }
+                String bodyContent = "";
+                if (!data.isEmpty()) {
+                    byte[] decodedBytes = Base64.getUrlDecoder().decode(data);
+                    bodyContent = new String(decodedBytes, StandardCharsets.UTF_8);
+                    // 본문 길이 제한: DB 컬럼 최대 길이에 맞게 자르기
+                    int maxBytes = 65535;  // TEXT 한계
+                    if (decodedBytes.length > maxBytes) {
+                        // UTF-8 바이트 기준 자르기 - 안전한 방법(복잡할 수 있음)
+                        // 여기선 최대 바이트까지만 자를 수 있도록 적절히 자르는 라이브러리 사용 권장
+                        // 간단히 4000글자 정도로 제한 (안전한 넉넉한 여유)
+                        int maxChars = 500;
+                        if (bodyContent.length() > maxChars) {
+                            bodyContent = bodyContent.substring(0, maxChars) + "...";
+                        }
+                    }
+                }
+
+                // 날짜 변환 메서드 이용
+                LocalDateTime koreanReceiveTime = EmailTimeParser.parseReceivedTime(date);
+                String displayTime = EmailTimeParser.formatKoreanTime(koreanReceiveTime);
+
+                // 엔티티 저장
+//                Gmail gmail = new Gmail(fromName, fromEmail, koreanReceiveTime, subject, bodyContent);
+//                gmailRepository.save(gmail);
+
+                // 엔티티 저장 + user_id까지
+                OAuth2User user = authentication.getPrincipal();
+                String email = user.getAttribute("email"); // 사용자 이메일 가져오기
+                User loginUser = userRepository.findByGoogleEmail(email).orElseThrow(() ->
+                        new UsernameNotFoundException("User not found: "));
+                Gmail gmail = new Gmail(fromName, fromEmail, koreanReceiveTime, subject, bodyContent, loginUser);
+                gmailRepository.save(gmail);
+            }
+
+            return ResponseEntity.ok("상위 " + messagesArray.length() + "개 메일을 DB에 저장 완료했습니다.");
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("메일 저장 중 오류 발생: " + e.getMessage());
+        }
+    }
+
+
+//    // 1개의 메일의 모든 정보 (보낸 이, 제목, 중요도, 읽음처리 .. 등)
+//    @GetMapping("/messages/{id}")
+//    public ResponseEntity<String> getMessageDetail(@PathVariable String id,
+//                                                   OAuth2AuthenticationToken authentication) {
+//        OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+//                authentication.getAuthorizedClientRegistrationId(),
+//                authentication.getName()
+//        );
+//        String accessToken = client.getAccessToken().getTokenValue();
+//
+
+    /// /        WebClient webClient = WebClient.builder()
+    /// /                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id)
+    /// /                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+    /// /                .build();
+//
+//        // Gmail message API 호출
+//        String response = gmailWebClient.get()
+//                .uri("/users/me/messages/" + id)  // baseUrl 뒤에 붙는 부분
+//                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)  // 토큰을 여기서 추가!
+//                .retrieve()
+//                .bodyToMono(String.class)
+//                .block();
+//
+//        return ResponseEntity.ok(response);
+//    }
+
+    // 1개의 메일 정보 중 발신자 이름, 발신자 이메일, 이메일 받은 시간, 제목, 내용) - 이걸 사용 할 예정!
+    @GetMapping("/messages/details/{id}")
+    public ResponseEntity<String> getMessageDataDetail(@PathVariable String id,
+                                                       OAuth2AuthenticationToken authentication) {
+        String accessToken = gmailService.getUserToken(authentication);
+
+//        WebClient webClient = WebClient.builder()
+//                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id)
+//                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+//                .build();
+
+        String response = gmailWebClient.get()
+                .uri("/users/me/messages/" + id)  // baseUrl 뒤에 붙는 부분
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)  // 토큰을 여기서 추가!
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        // (간단 버전) Base64 디코딩 로직
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(response);
+            org.json.JSONObject payload = json.getJSONObject("payload");
+
+            // 1. 헤더에서 From, Date(날짜), Subject 추출
+            String from = "";
+            String receivedTime = "";
+            String subject = "";
+
+            org.json.JSONArray headers = payload.getJSONArray("headers");
+            List<String> receivedHeaders = new ArrayList<>();
+
+            for (int i = 0; i < headers.length(); i++) {
+                org.json.JSONObject header = headers.getJSONObject(i);
+                String name = header.getString("name");
+                String value = header.getString("value");
+                if ("From".equalsIgnoreCase(name)) {
+                    from = value;
+                } else if ("Received".equalsIgnoreCase(name)) {
+                    receivedHeaders.add(value);
+                } else if ("Subject".equalsIgnoreCase(name)) {
+                    subject = value;
+                }
+            }
+
+            // 우선순위에 따른 Received 헤더 선택 ..
+            for (String received : receivedHeaders) {
+                if (received.contains("SMTP id") && received.contains("gmail.com")) {
+                    receivedTime = received;
+                    break;
+                }
+            }
+            if (receivedTime.isEmpty()) {
+                for (String received : receivedHeaders) {
+                    if (received.contains("SMTP id") || received.contains("ESMTP id")) {
+                        receivedTime = received;
+                        break;
+                    }
+                }
+            }
+            if (receivedTime.isEmpty() && !receivedHeaders.isEmpty()) {
+                receivedTime = receivedHeaders.get(0);
+            }
+
+            // From에서 이름과 이메일 분리
+            String fromName = "";
+            String fromEmail = "";
+            if (!from.isEmpty()) {
+                // 예: "홍길동 <hong@example.com>" or "hong@example.com"
+                int startIdx = from.indexOf("<");
+                int endIdx = from.indexOf(">");
+                if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
+                    fromName = from.substring(0, startIdx).trim().replace("\"", "");
+                    fromEmail = from.substring(startIdx + 1, endIdx).trim();
+                } else {
+                    // 이름 없이 이메일 주소만 있는 경우
+                    fromEmail = from.trim();
+                }
+            }
+
+            // 2. 본문 내용 가져오기 (multipart 대응)
+            String data = "";
+            if (payload.has("body") && payload.getJSONObject("body").has("data")) {
+                data = payload.getJSONObject("body").optString("data", "");
+            }
+
+            if (data.isEmpty() && payload.has("parts")) {
+                org.json.JSONArray parts = payload.getJSONArray("parts");
+                for (int i = 0; i < parts.length(); i++) {
+                    org.json.JSONObject part = parts.getJSONObject(i);
+                    String mimeType = part.getString("mimeType");
+                    if ("text/html".equalsIgnoreCase(mimeType) || "text/plain".equalsIgnoreCase(mimeType)) {
+                        data = part.getJSONObject("body").optString("data", "");
+                        if (!data.isEmpty()) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            String bodyContent = "";
+            if (!data.isEmpty()) {
+                byte[] decodedBytes = Base64.getUrlDecoder().decode(data);
+                bodyContent = new String(decodedBytes, StandardCharsets.UTF_8);
+            }
+
+            // 날짜 포맷팅
+            LocalDateTime koreanReceiveTime = EmailTimeParser.parseReceivedTime(receivedTime);
+            String displayTime = EmailTimeParser.formatKoreanTime(koreanReceiveTime);
+
+            // 결과 문자열로 출력 (필요하면 JSON, DTO로 변환 가능)
+            String result = String.format("[발신자 이름] %s\n[발신자 이메일] %s\n[받은 시간] %s\n[제목] %s\n[내용]\n%s",
+                    fromName, fromEmail, displayTime, subject, bodyContent);
+            if (koreanReceiveTime != null) {
+                gmailRepository.save(new Gmail(fromName, fromEmail, koreanReceiveTime, subject, bodyContent));
+            }
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error while parsing message detail: " + e.getMessage());
+        }
+    }
+
+    // db에 저장된 모든 메일 목록 조회
+    @GetMapping("/get/all")
+    public ResponseEntity<List<Gmail>> getAllEmails() {
+        List<Gmail> emails = gmailRepository.findAll();
+        return ResponseEntity.ok(emails);
+    }
+
+    // 해당 사용자의 db에 저장된 메일 목록 조회
+    @GetMapping("/get/mails")
+    public ResponseEntity<List<Gmail>> getEmails(OAuth2AuthenticationToken authentication) {
+        OAuth2User user = authentication.getPrincipal();
+        String email = user.getAttribute("email");
+        User loginUser = userRepository.findByGoogleEmail(email).orElseThrow(() ->
+                new UsernameNotFoundException("User not found: "));
+        List<Gmail> emails = gmailRepository.findByUser(loginUser); // user_id 맞게 가져오기
+        return ResponseEntity.ok(emails);
+    }
+
+    // 1개의 메일의 '내용'만 추출
+//    @GetMapping("/messages/body/{id}")
+//    public String getMessageBodyDetail(@PathVariable String id,
+//                                       OAuth2AuthenticationToken authentication) {
+//        OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+//                authentication.getAuthorizedClientRegistrationId(),
+//                authentication.getName()
+//        );
+//        String accessToken = client.getAccessToken().getTokenValue();
+//
+//        WebClient webClient = WebClient.builder()
+//                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id)
+//                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+//                .build();
+//
+//        // Gmail message API 호출
+//        String response = webClient.get()
+//                .retrieve()
+//                .bodyToMono(String.class)
+//                .block();
+//
+//        // (간단 버전) Base64 디코딩 로직
+//        try {
+//            org.json.JSONObject json = new org.json.JSONObject(response);
+//            String data = json.getJSONObject("payload")
+//                    .getJSONObject("body")
+//                    .optString("data", "");
+//
+//            if (data.isEmpty() && json.getJSONObject("payload").has("parts")) {
+//                // multipart 메일의 경우 parts[0].body.data 에 존재함
+//                data = json.getJSONObject("payload")
+//                        .getJSONArray("parts")
+//                        .getJSONObject(0)
+//                        .getJSONObject("body")
+//                        .optString("data", "");
+//            }
+//
+//            if (!data.isEmpty()) {
+//                byte[] decoded = Base64.getUrlDecoder().decode(data);
+//                String html = new String(decoded, StandardCharsets.UTF_8);
+//                return html;
+//            }
+//
+//            return "본문이 없습니다.";
+//
+//        } catch (Exception e) {
+//            return "Error: " + e.getMessage();
+//        }
+//    }
+}
