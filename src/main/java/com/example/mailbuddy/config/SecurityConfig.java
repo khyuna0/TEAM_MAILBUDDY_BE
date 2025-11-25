@@ -76,7 +76,7 @@ public class SecurityConfig {
                                 .loginProcessingUrl("/api/auth/login")
                                 .usernameParameter("username")
                                 .passwordParameter("password")
-                                .defaultSuccessUrl("http://localhost:3000/schedule", true)  // 로그인 성공 시 이동할 페이지
+                                .defaultSuccessUrl("http://52.79.115.253:3000/schedule", true)  // 로그인 성공 시 이동할 페이지
 //                        .successHandler((req, res, auth) -> res.setStatus(HttpServletResponse.SC_OK))
                                 .successHandler(customLoginSuccessHandler)  // 커스텀 로그인 성공 핸들러 등록 **
                                 .failureHandler((req, res, ex) -> res.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
@@ -92,7 +92,7 @@ public class SecurityConfig {
                                 .userService(customOAuth2UserService)
                         )
                         .failureHandler(oauth2LoginFailureHandler)
-                        .defaultSuccessUrl("http://localhost:3000/schedule", true)  // 로그인 성공 시 이동할 페이지
+                        .defaultSuccessUrl("http://52.79.115.253:3000/schedule", true)  // 로그인 성공 시 이동할 페이지
                 )
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")

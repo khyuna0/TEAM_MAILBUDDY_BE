@@ -5,9 +5,9 @@ spring:
   jackson:
     time-zone: Asia/Seoul
   datasource:
-    url: jdbc:mysql://localhost:3306/mailbuddy
-    username: root
-    password: 12345
+    url: jdbc:mysql://mailbuddy-db.c3qm8q6gwttb.ap-northeast-2.rds.amazonaws.com:3306/mailbuddy
+    username: admin
+    password: mailbuddy123
   #    url: jdbc:mysql://spring-db-1.cruymm4aqdpz.ap-northeast-2.rds.amazonaws.com:3306/emotion # RDS ???? ?????
   #    username: admin # RDS ??? ??? ??
   #    password: 12345678 # RDS ??? ????
