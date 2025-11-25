@@ -21,7 +21,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "http://localhost:3000",
 
                         // 배포된 프론트 (EC2로 제공되는 React build)
-                        "http://52.79.115.253"
+                        "http://52.79.115.253",
+
+                        // S3 배포 URL
+                        "http://mailbuddy-frontend.s3-website-ap-northeast-2.amazonaws.com"
                 )
 
                 // 허용할 HTTP 메서드
