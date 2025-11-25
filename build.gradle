@@ -52,6 +52,10 @@ dependencies {
     // 엔티티 암호화 저장
     implementation 'com.github.ulisesbocchio:jasypt-spring-boot-starter:3.0.4'
 
+    // 배포 쿠키용
+    implementation 'org.springframework.session:spring-session-core'
+    implementation 'org.springframework.session:spring-session-web'
+
 }
 
 tasks.named('test') {
