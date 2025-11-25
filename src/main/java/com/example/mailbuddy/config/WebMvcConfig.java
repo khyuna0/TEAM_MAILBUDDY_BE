@@ -14,6 +14,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .allowedOrigins(
                         "http://localhost:3000",  // 로컬 개발
                         "http://52.79.115.253",   // EC2 프론트엔드
+                        "http://52.79.115.253:3000",
                         "http://mailbuddy-s3-fe.s3-website-ap-northeast-2.amazonaws.com" // S3 정적 사이트
                 )
                 .allowedMethods("*")        // GET/POST/PUT/PATCH/DELETE 모두 허용
