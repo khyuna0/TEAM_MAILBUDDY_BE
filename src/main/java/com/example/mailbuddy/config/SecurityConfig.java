@@ -150,7 +150,7 @@ public class SecurityConfig {
                 "http://localhost:3000",
                 "http://52.79.115.253",
                 "http://52.79.115.253:3000",
-                "http://mailbuddy-s3-fe.s3-website-ap-northeast-2.amazonaws.com"
+                "http://mailbuddy-s3-fe.s3-website.ap-northeast-2.amazonaws.com"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
