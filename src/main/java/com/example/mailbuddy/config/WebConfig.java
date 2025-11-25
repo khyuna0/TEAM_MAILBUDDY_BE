@@ -9,10 +9,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addViewController("/{path:[^\\.]*}")
-                .setViewName("forward:/index.html");
-
-        registry.addViewController("/**/{path:[^\\.]*}")
+        registry.addViewController("/{path:[\\w\\-]+}")
                 .setViewName("forward:/index.html");
     }
 }
