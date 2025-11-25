@@ -196,7 +196,7 @@ public class SecurityConfig {
         DefaultCookieSerializer serializer = new DefaultCookieSerializer();
 
         serializer.setCookieName("JSESSIONID");
-        serializer.setSameSite("None");
+        serializer.setSameSite("Lax");
         serializer.setUseSecureCookie(false); // 지금 환경에서는 반드시 false (중요)
         serializer.setCookiePath("/");
 
