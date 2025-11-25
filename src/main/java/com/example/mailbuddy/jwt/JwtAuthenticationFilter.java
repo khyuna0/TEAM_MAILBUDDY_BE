@@ -19,8 +19,8 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final com.example.mailbuddy.jwt.JwtTokenProvider jwtTokenProvider;
-    private final UserDetailsService userDetailsService; // ★ 기존 UserService 재사용
+    private final JwtTokenProvider jwtTokenProvider;
+    private final UserDetailsService userDetailsService; // ★ 반드시 필요
 
     @Override
     protected void doFilterInternal(HttpServletRequest req,
@@ -36,13 +36,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (jwtTokenProvider.validateToken(token)) {
                 String username = jwtTokenProvider.getUsername(token);
 
+                // ★ DB 로드 (스프링 시큐리티 표준)
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null,
-                                userDetails.getAuthorities()
+                                userDetails, null, userDetails.getAuthorities()
                         );
 
                 SecurityContextHolder.getContext().setAuthentication(auth);
@@ -52,3 +51,4 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         chain.doFilter(req, res);
     }
 }
+

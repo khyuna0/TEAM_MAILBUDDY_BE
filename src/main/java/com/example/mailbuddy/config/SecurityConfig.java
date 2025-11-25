@@ -2,9 +2,9 @@ package com.example.mailbuddy.config;
 
 import com.example.mailbuddy.jwt.JwtAuthenticationFilter;     // ★ 추가: JWT 인증 필터
 import com.example.mailbuddy.jwt.JwtTokenProvider;           // ★ 추가: JWT 토큰 생성/검증
-import com.example.mailbuddy.handler.OAuth2JwtSuccessHandler; // ★ 추가: OAuth2 성공 시 JWT 발급 핸들러
 
 import com.example.mailbuddy.handler.OAuth2LoginFailureHandler;
+import com.example.mailbuddy.jwt.OAuth2JwtSuccessHandler;
 import com.example.mailbuddy.service.CustomOAuth2UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -87,7 +87,7 @@ public class SecurityConfig {
 
         // ★ JWT 인증 필터 추가: UsernamePasswordAuthenticationFilter 전에 실행
         http.addFilterBefore(
-                new JwtAuthenticationFilter(jwtTokenProvider),
+                new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService),
                 UsernamePasswordAuthenticationFilter.class
         );
 
